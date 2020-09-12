@@ -29,14 +29,19 @@ fn main() -> Result<()> {
     let head_tree = head.peel_to_tree()?;
     let mut log_walk = repository.revwalk()?;
     log_walk.push_head()?;
-    let commits: Result<Vec<_>> = log_walk.map(|oid_result| {
-        let oid = oid_result?;
-        let commit = repository.find_commit(oid)?;
-        let tree = commit.tree()?;
-        let parent_tree = commit.parents().next().and_then(|parent| parent.tree().ok());
-        let diff = repository.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
-        Ok(commit)
-    }).collect();
+    let commits: Result<Vec<_>> = log_walk
+        .map(|oid_result| {
+            let oid = oid_result?;
+            let commit = repository.find_commit(oid)?;
+            let tree = commit.tree()?;
+            let parent_tree = commit
+                .parents()
+                .next()
+                .and_then(|parent| parent.tree().ok());
+            let diff = repository.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
+            Ok(commit)
+        })
+        .collect();
     let commits = commits?;
     let log = html! {
         table {
