@@ -22,6 +22,22 @@ enum InvalidUtf {
     InvalidUtf,
 }
 
+struct CommitInfo<'a> {
+   commit: git2::Commit<'a>,
+   tree: git2::Tree<'a>,
+   parent_tree: Option<git2::Tree<'a>>,
+   diff: git2::Diff<'a>,
+}
+
+impl<'a> CommitInfo<'a> {
+    fn time(&self) -> chrono::DateTime<chrono::FixedOffset> {
+        use chrono::TimeZone;
+        let commit_time = self.commit.time();
+        let offset = chrono::FixedOffset::east(commit_time.offset_minutes() * 60);
+        offset.timestamp(commit_time.seconds(), 0)
+    }
+}
+
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
     let repository = git2::Repository::open(args.source)?;
@@ -29,8 +45,8 @@ fn main() -> Result<()> {
     let head_tree = head.peel_to_tree()?;
     let mut log_walk = repository.revwalk()?;
     log_walk.push_head()?;
-    let commits: Result<Vec<_>> = log_walk
-        .map(|oid_result| {
+    let commits = log_walk
+        .map(|oid_result| -> Result<_> {
             let oid = oid_result?;
             let commit = repository.find_commit(oid)?;
             let tree = commit.tree()?;
@@ -39,10 +55,8 @@ fn main() -> Result<()> {
                 .next()
                 .and_then(|parent| parent.tree().ok());
             let diff = repository.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
-            Ok(commit)
-        })
-        .collect();
-    let commits = commits?;
+            Ok(CommitInfo { commit, tree, parent_tree, diff })
+        });
     let log = html! {
         table {
             thead {
@@ -56,14 +70,16 @@ fn main() -> Result<()> {
                 }
             }
             tbody {
-                @for commit in commits {
+                @for ci_result in commits {
+                    @let ci = ci_result?;
                     tr {
-                        td { (commit.time().seconds()) }
-                        td { (commit.summary().ok_or(InvalidUtf::InvalidUtf)?) }
-                        td { (commit.author().name().ok_or(InvalidUtf::InvalidUtf)?) }
-                        td { "TODO" }
-                        td { "TODO" }
-                        td { "TODO" }
+                        td { (ci.time().to_rfc2822()) }
+                        td { (ci.commit.summary().ok_or(InvalidUtf::InvalidUtf)?) }
+                        td { (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?) }
+                        @let diffstats = ci.diff.stats()?;
+                        td { (diffstats.files_changed()) }
+                        td { (diffstats.insertions()) }
+                        td { (diffstats.deletions()) }
                     }
                 }
             }
