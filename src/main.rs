@@ -118,8 +118,8 @@ fn page_func(
                 body {
                     nav {
                         h1 { (name) }
-                        @if description.len() > 0 { p { (description) } }
-                        @if url.len() > 0 { pre {
+                        @if !description.is_empty() { p { (description) } }
+                        @if !url.is_empty() { pre {
                             "git clone "
                             a href={(url)} { (url) }
                         } }
@@ -144,7 +144,7 @@ fn page_func(
 
 fn build_tree_index_page(
     subtree: &git2::Tree,
-    page: &Box<dyn Fn(&str, &PathBuf, maud::Markup) -> maud::Markup>,
+    page: &dyn Fn(&str, &PathBuf, maud::Markup) -> maud::Markup,
     page_title: &str,
     target_filename: &PathBuf,
 ) {
@@ -331,7 +331,7 @@ fn main() -> Result<()> {
     fs::create_dir_all(&tree_root)?;
     build_tree_index_page(&head_tree, &page, "Files", &tree_root.join("index.html"));
     head_tree.walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
-        let parent_path = if parent.len() > 0 {
+        let parent_path = if !parent.is_empty() {
             tree_root.join(parent)
         } else {
             tree_root.clone()
