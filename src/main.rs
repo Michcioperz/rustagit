@@ -1,6 +1,8 @@
 use anyhow::Result;
 use argh::FromArgs;
+use fs_err as fs;
 use maud::html;
+use std::io::Write;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -36,6 +38,40 @@ impl<'a> CommitInfo<'a> {
         let offset = chrono::FixedOffset::east(commit_time.offset_minutes() * 60);
         offset.timestamp(commit_time.seconds(), 0)
     }
+
+    #[inline]
+    fn simplify_formatted_duration(duration: humantime::FormattedDuration) -> String {
+        let duration = format!("{}", duration);
+        duration
+            .as_str()
+            .split_whitespace()
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn human_time(&self, now: chrono::DateTime<chrono::Local>) -> String {
+        let duration = self.time().signed_duration_since(now);
+        if duration < chrono::Duration::zero() {
+            format!(
+                "{} ago",
+                Self::simplify_formatted_duration(humantime::format_duration(
+                    (-duration)
+                        .to_std()
+                        .expect("out of range duration when converting from chrono to std")
+                ))
+            )
+        } else {
+            format!(
+                "in {}",
+                Self::simplify_formatted_duration(humantime::format_duration(
+                    duration
+                        .to_std()
+                        .expect("out of range duration when converting from chrono to std")
+                ))
+            )
+        }
+    }
 }
 
 fn commit_log<'a>(
@@ -61,93 +97,166 @@ fn commit_log<'a>(
     }))
 }
 
+fn page_func(
+    name: String,
+    description: String,
+    url: String,
+    base_path: PathBuf,
+) -> Box<dyn Fn(&str, &PathBuf, maud::Markup) -> maud::Markup> {
+    Box::new(move |title: &str, path: &PathBuf, content: maud::Markup| {
+        let relpath = path.strip_prefix(&base_path).unwrap();
+        let the_way_out = "../".repeat(relpath.components().count().saturating_sub(1));
+        html! {
+            (maud::DOCTYPE)
+            html {
+                head {
+                    meta charset="utf-8";
+                    meta name="viewport" content="width=device-width";
+                    title { (title) " – " (name) }
+                }
+                body {
+                    nav {
+                        h1 { (name) }
+                        p { (description) }
+                        pre {
+                            "git clone "
+                            a href={(url)} { (url) }
+                        }
+                        ul.inline {
+                            // TODO: relativize links
+                            li { a href={(the_way_out) "log.html"} { "Commits" } }
+                            li { a href={(the_way_out) "tree.html"} { "Files" } }
+                            li { a href={(the_way_out) "refs.html"} { "Branches and tags" } }
+                        }
+                    }
+                    main { (content) }
+                }
+            }
+        }
+    })
+}
+
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
     let repository = git2::Repository::open(args.source)?;
     let head = repository.head()?;
     let head_tree = head.peel_to_tree()?;
-    let log = html! {
-        table {
-            thead {
-                tr {
-                    th { "Date" }
-                    th { "Commit message" }
-                    th { "Author" }
-                    th { "Files" }
-                    th { "+" }
-                    th { "-" }
-                }
-            }
-            tbody {
-                @for ci_result in commit_log(&repository)? {
-                    @let ci = ci_result?;
+    let now = chrono::Local::now();
+
+    let repository_name = "TODO_repository_name".to_string();
+    let repository_description = "TODO_repository_description".to_string();
+    let repository_url = "https://git.hinata.iscute.ovh/TODO".to_string();
+    let page = page_func(
+        repository_name,
+        repository_description,
+        repository_url,
+        args.destination.clone(),
+    );
+
+    fs::create_dir_all(&args.destination)?;
+
+    let log_path = &args.destination.join("log.html");
+    let log = page(
+        "Commit log",
+        &log_path,
+        html! {
+            table {
+                thead {
                     tr {
-                        td { (ci.time().to_rfc2822()) }
-                        td { (ci.commit.summary().ok_or(InvalidUtf::InvalidUtf)?) }
-                        td { (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?) }
-                        @let diffstats = ci.diff.stats()?;
-                        td { (diffstats.files_changed()) }
-                        td { (diffstats.insertions()) }
-                        td { (diffstats.deletions()) }
+                        th { "Date" }
+                        th { "Commit message" }
+                        th { "Author" }
+                        th.numeric { "Files" }
+                        th.numeric { "+" }
+                        th.numeric { "-" }
+                    }
+                }
+                tbody {
+                    @for ci_result in commit_log(&repository)? {
+                        @let ci = ci_result?;
+                        tr {
+                            td {
+                                abbr title={(ci.time())} {
+                                    (ci.time().date().format("%Y-%m-%d"))
+                                }
+                            }
+                            td {
+                                a href={"commit/" (ci.commit.id()) ".html"} {
+                                    (ci.commit.summary().ok_or(InvalidUtf::InvalidUtf)?)
+                                }
+                            }
+                            td { (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?) }
+                            @let diffstats = ci.diff.stats()?;
+                            td.numeric { (diffstats.files_changed()) }
+                            td.numeric { (diffstats.insertions()) }
+                            td.numeric { (diffstats.deletions()) }
+                        }
                     }
                 }
             }
-        }
-    };
+        },
+    );
+    fs::File::create(log_path).and_then(|mut f| f.write_all(log.into_string().as_bytes()))?;
 
+    let commits_dir = args.destination.join("commit");
+    fs::create_dir_all(&commits_dir)?;
     for ci_result in commit_log(&repository)? {
         let ci = ci_result?;
-        let patch = html! {
-            dl {
-                dd { "commit" }
-                dt { (ci.commit.id()) }
-                @for parent in ci.commit.parents() {
-                    dd { "parent" }
-                    dt { (parent.id()) }
-                }
-                dd { "author" }
-                dt {
-                    (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?)
-                    " <"
-                    @let sig = ci.commit.author();
-                    @let email = sig.email().ok_or(InvalidUtf::InvalidUtf)?;
-                    a href={"mailto:" (&email)} { (email) }
-                    ">"
-                }
-                dd { "committer" }
-                dt {
-                    (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?)
-                    " <"
-                    @let sig = ci.commit.committer();
-                    @let email = sig.email().ok_or(InvalidUtf::InvalidUtf)?;
-                    a href={"mailto:" (&email)} { (email) }
-                    ">"
-                }
-                dd { "message" }
-                dt {
-                    pre { (ci.commit.message().ok_or(InvalidUtf::InvalidUtf)?) }
-                }
-                dd { "diffstat" }
-                dt {
-                    pre {
-                        (ci.diff.stats()?.to_buf(git2::DiffStatsFormat::FULL, 72)?.as_str().ok_or(InvalidUtf::InvalidUtf)?)
+        let patch_path = commits_dir.join(format!("{}.html", ci.commit.id()));
+        let patch = page(
+            &format!("Commit {}", ci.commit.id()),
+            &patch_path,
+            html! {
+                dl {
+                    dt { "commit" }
+                    dd { (ci.commit.id()) }
+                    @for parent in ci.commit.parents() {
+                        dt { "parent" }
+                        dd { a href={(parent.id()) ".html"} { (parent.id()) } }
+                    }
+                    dt { "author" }
+                    dd {
+                        (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?)
+                        " <"
+                        @let sig = ci.commit.author();
+                        @let email = sig.email().ok_or(InvalidUtf::InvalidUtf)?;
+                        a href={"mailto:" (&email)} { (email) }
+                        ">"
+                    }
+                    dt { "committer" }
+                    dd {
+                        (ci.commit.author().name().ok_or(InvalidUtf::InvalidUtf)?)
+                        " <"
+                        @let sig = ci.commit.committer();
+                        @let email = sig.email().ok_or(InvalidUtf::InvalidUtf)?;
+                        a href={"mailto:" (&email)} { (email) }
+                        ">"
+                    }
+                    dt { "message" }
+                    dd {
+                        pre { (ci.commit.message().ok_or(InvalidUtf::InvalidUtf)?) }
+                    }
+                    dt { "diffstat" }
+                    dd {
+                        pre {
+                            (ci.diff.stats()?.to_buf(git2::DiffStatsFormat::FULL, 72)?.as_str().ok_or(InvalidUtf::InvalidUtf)?)
+                        }
                     }
                 }
-            }
-            @for (delta_id, delta) in ci.diff.deltas().enumerate() {
-                @let patch = git2::Patch::from_diff(&ci.diff, delta_id)?;
-                @match patch {
-                    Some(mut patch) => {
-                        pre { (patch.to_buf()?.as_str().ok_or(InvalidUtf::InvalidUtf)?) }
+                @for (delta_id, _delta) in ci.diff.deltas().enumerate() {
+                    @let patch = git2::Patch::from_diff(&ci.diff, delta_id)?;
+                    @match patch {
+                        Some(mut patch) => {
+                            pre { (patch.to_buf()?.as_str().ok_or(InvalidUtf::InvalidUtf)?) }
+                        }
+                        None => { "unchanged or binary" }
                     }
-                    None => { "unchanged or binary" }
                 }
-            }
-        };
-        dbg!(patch);
+            },
+        );
+        fs::File::create(patch_path)
+            .and_then(|mut f| f.write_all(patch.into_string().as_bytes()))?;
     }
-
-    dbg!(log);
 
     Ok(())
 }
