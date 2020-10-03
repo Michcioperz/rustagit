@@ -113,15 +113,16 @@ fn page_func(
                     meta charset="utf-8";
                     meta name="viewport" content="width=device-width";
                     title { (title) " – " (name) }
+                    link rel="stylesheet" href={(the_way_out) "rustagit.css"};
                 }
                 body {
                     nav {
                         h1 { (name) }
-                        p { (description) }
-                        pre {
+                        @if description.len() > 0 { p { (description) } }
+                        @if url.len() > 0 { pre {
                             "git clone "
                             a href={(url)} { (url) }
-                        }
+                        } }
                         ul.inline {
                             li { a href={(the_way_out) "log.html"} { "Commits" } }
                             li { a href={(the_way_out) "tree/index.html"} { "Files" } }
@@ -166,13 +167,31 @@ fn build_tree_index_page(
 
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
-    let repository = git2::Repository::open(args.source)?;
+    let repository = git2::Repository::open(&args.source)?;
     let head = repository.head()?;
     let head_tree = head.peel_to_tree()?;
 
-    let repository_name = "TODO_repository_name".to_string();
-    let repository_description = "TODO_repository_description".to_string();
-    let repository_url = "https://git.hinata.iscute.ovh/TODO".to_string();
+    let repository_name = args
+        .source
+        .canonicalize()?
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let repository_description = match fs::read_to_string(repository.path().join("description")) {
+        Ok(s) => s,
+        Err(e) => {
+            dbg!(e);
+            "".to_string()
+        }
+    };
+    let repository_url = match fs::read_to_string(repository.path().join("url")) {
+        Ok(s) => s,
+        Err(e) => {
+            dbg!(e);
+            "".to_string()
+        }
+    };
     let page = page_func(
         repository_name,
         repository_description,
@@ -183,8 +202,21 @@ fn main() -> Result<()> {
     let syntax_set = syntect::parsing::SyntaxSet::load_defaults_newlines();
     let theme_set = syntect::highlighting::ThemeSet::load_defaults();
     let theme = &theme_set.themes["InspiredGitHub"];
+    let class_style = syntect::html::ClassStyle::SpacedPrefixed { prefix: "syntect-" };
 
     fs::create_dir_all(&args.destination)?;
+
+    let css_path = &args.destination.join("rustagit.css");
+    let css = syntect::html::css_for_theme_with_class_style(theme, class_style)
+        + r#"
+        .numeric {
+            text-align: right;
+        }
+        td.numeric {
+            font-family: monospace;
+        }
+    "#;
+    fs::File::create(css_path).and_then(|mut f| f.write_all(css.as_bytes()))?;
 
     let log_path = &args.destination.join("log.html");
     let log = page(
@@ -334,12 +366,20 @@ fn main() -> Result<()> {
                             .or(ext_syntax)
                             .or(line_syntax)
                             .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
-                        maud::PreEscaped(syntect::html::highlighted_html_for_string(
-                            content,
-                            &syntax_set,
-                            syntax,
-                            theme,
-                        ))
+                        let mut generator =
+                            syntect::html::ClassedHTMLGenerator::new_with_class_style(
+                                syntax,
+                                &syntax_set,
+                                class_style,
+                            );
+                        for line in content.lines() {
+                            generator.parse_html_for_line(line);
+                        }
+                        html! {
+                            pre {
+                                (maud::PreEscaped(generator.finalize()))
+                            }
+                        }
                     }
                     Err(_) => {
                         fs::File::create(parent_path.join(name))
