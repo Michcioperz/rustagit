@@ -26,8 +26,6 @@ enum InvalidUtf {
 
 struct CommitInfo<'a> {
     commit: git2::Commit<'a>,
-    tree: git2::Tree<'a>,
-    parent_tree: Option<git2::Tree<'a>>,
     diff: git2::Diff<'a>,
 }
 
@@ -37,40 +35,6 @@ impl<'a> CommitInfo<'a> {
         let commit_time = self.commit.time();
         let offset = chrono::FixedOffset::east(commit_time.offset_minutes() * 60);
         offset.timestamp(commit_time.seconds(), 0)
-    }
-
-    #[inline]
-    fn simplify_formatted_duration(duration: humantime::FormattedDuration) -> String {
-        let duration = format!("{}", duration);
-        duration
-            .as_str()
-            .split_whitespace()
-            .take(2)
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    fn human_time(&self, now: chrono::DateTime<chrono::Local>) -> String {
-        let duration = self.time().signed_duration_since(now);
-        if duration < chrono::Duration::zero() {
-            format!(
-                "{} ago",
-                Self::simplify_formatted_duration(humantime::format_duration(
-                    (-duration)
-                        .to_std()
-                        .expect("out of range duration when converting from chrono to std")
-                ))
-            )
-        } else {
-            format!(
-                "in {}",
-                Self::simplify_formatted_duration(humantime::format_duration(
-                    duration
-                        .to_std()
-                        .expect("out of range duration when converting from chrono to std")
-                ))
-            )
-        }
     }
 }
 
@@ -88,12 +52,7 @@ fn commit_log<'a>(
             .next()
             .and_then(|parent| parent.tree().ok());
         let diff = repository.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
-        Ok(CommitInfo {
-            commit,
-            tree,
-            parent_tree,
-            diff,
-        })
+        Ok(CommitInfo { commit, diff })
     }))
 }
 
