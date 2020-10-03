@@ -141,7 +141,6 @@ fn main() -> Result<()> {
     let repository = git2::Repository::open(args.source)?;
     let head = repository.head()?;
     let head_tree = head.peel_to_tree()?;
-    let now = chrono::Local::now();
 
     let repository_name = "TODO_repository_name".to_string();
     let repository_description = "TODO_repository_description".to_string();
@@ -257,6 +256,70 @@ fn main() -> Result<()> {
         fs::File::create(patch_path)
             .and_then(|mut f| f.write_all(patch.into_string().as_bytes()))?;
     }
+
+    let tree_root = args.destination.join("tree");
+    fs::create_dir_all(&tree_root)?;
+    head_tree.walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
+        // dbg!((entry.name(), entry.kind()));
+        let parent_path = if parent.len() > 0 {
+            tree_root.join(parent)
+        } else {
+            tree_root.clone()
+        };
+        let full_filename = format!("{}{}", parent, entry.name().unwrap());
+        match entry.kind() {
+            Some(git2::ObjectType::Tree) => {
+                let path = parent_path.join(entry.name().unwrap());
+                fs::create_dir_all(&path).unwrap();
+                let subtree = entry
+                    .to_object(&repository)
+                    .unwrap()
+                    .peel_to_tree()
+                    .unwrap();
+                let subtree_path = path.join("index.html");
+                let subtree_html = page(
+                    &full_filename,
+                    &subtree_path,
+                    html! {
+                        ul {
+                            @for item in subtree.iter() {
+                                li {
+                                    a href={(item.name().unwrap()) ".html"} {
+                                        (item.name().unwrap())
+                                    }
+                                }
+                            }
+                        }
+                    },
+                );
+                fs::File::create(subtree_path)
+                    .and_then(|mut f| f.write_all(subtree_html.into_string().as_bytes()))
+                    .unwrap();
+            }
+            Some(git2::ObjectType::Blob) => {
+                let path = parent_path.join(format!("{}.html", entry.name().unwrap()));
+                let obj = entry
+                    .to_object(&repository)
+                    .unwrap()
+                    .peel_to_blob()
+                    .unwrap();
+                let blob = page(
+                    &full_filename,
+                    &path,
+                    html! {
+                        pre {
+                            (std::str::from_utf8(obj.content()).unwrap())
+                        }
+                    },
+                );
+                fs::File::create(path)
+                    .and_then(|mut f| f.write_all(blob.into_string().as_bytes()))
+                    .unwrap();
+            }
+            _ => {}
+        }
+        git2::TreeWalkResult::Ok
+    })?;
 
     Ok(())
 }
