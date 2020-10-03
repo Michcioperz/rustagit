@@ -263,7 +263,6 @@ fn main() -> Result<()> {
     let tree_root = args.destination.join("tree");
     fs::create_dir_all(&tree_root)?;
     head_tree.walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
-        // dbg!((entry.name(), entry.kind()));
         let parent_path = if parent.len() > 0 {
             tree_root.join(parent)
         } else {
@@ -287,7 +286,10 @@ fn main() -> Result<()> {
                         ul {
                             @for item in subtree.iter() {
                                 li {
-                                    a href={(item.name().unwrap()) ".html"} {
+                                    a href={
+                                        (item.name().unwrap())
+                                        @if let Some(git2::ObjectType::Tree) = item.kind() { "/" } @else { ".html" }
+                                    } {
                                         (item.name().unwrap())
                                     }
                                 }
