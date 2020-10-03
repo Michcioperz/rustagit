@@ -130,6 +130,12 @@ fn page_func(
                         }
                     }
                     main { (content) }
+                    footer {
+                        "Powered by "
+                        a href="https://git.hinata.iscute.ovh/rustagit/" {
+                            "Rustagit, static git browser generator"
+                        }
+                    }
                 }
             }
         }
