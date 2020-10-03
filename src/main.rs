@@ -124,7 +124,7 @@ fn page_func(
                         }
                         ul.inline {
                             li { a href={(the_way_out) "log.html"} { "Commits" } }
-                            li { a href={(the_way_out) "tree.html"} { "Files" } }
+                            li { a href={(the_way_out) "tree/index.html"} { "Files" } }
                             li { a href={(the_way_out) "refs.html"} { "Branches and tags" } }
                         }
                     }
@@ -133,6 +133,35 @@ fn page_func(
             }
         }
     })
+}
+
+fn build_tree_index_page(
+    subtree: &git2::Tree,
+    page: &Box<dyn Fn(&str, &PathBuf, maud::Markup) -> maud::Markup>,
+    page_title: &str,
+    target_filename: &PathBuf,
+) {
+    let subtree_html = page(
+        &page_title,
+        target_filename,
+        html! {
+            ul {
+                @for item in subtree.iter() {
+                    li {
+                        a href={
+                            (item.name().unwrap())
+                            @if let Some(git2::ObjectType::Tree) = item.kind() { "/" } @else { ".html" }
+                        } {
+                            (item.name().unwrap())
+                        }
+                    }
+                }
+            }
+        },
+    );
+    fs::File::create(target_filename)
+        .and_then(|mut f| f.write_all(subtree_html.into_string().as_bytes()))
+        .unwrap();
 }
 
 fn main() -> Result<()> {
@@ -262,6 +291,7 @@ fn main() -> Result<()> {
 
     let tree_root = args.destination.join("tree");
     fs::create_dir_all(&tree_root)?;
+    build_tree_index_page(&head_tree, &page, "Files", &tree_root.join("index.html"));
     head_tree.walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
         let parent_path = if parent.len() > 0 {
             tree_root.join(parent)
@@ -273,33 +303,13 @@ fn main() -> Result<()> {
             Some(git2::ObjectType::Tree) => {
                 let path = parent_path.join(entry.name().unwrap());
                 fs::create_dir_all(&path).unwrap();
+                let subtree_path = path.join("index.html");
                 let subtree = entry
                     .to_object(&repository)
                     .unwrap()
                     .peel_to_tree()
                     .unwrap();
-                let subtree_path = path.join("index.html");
-                let subtree_html = page(
-                    &full_filename,
-                    &subtree_path,
-                    html! {
-                        ul {
-                            @for item in subtree.iter() {
-                                li {
-                                    a href={
-                                        (item.name().unwrap())
-                                        @if let Some(git2::ObjectType::Tree) = item.kind() { "/" } @else { ".html" }
-                                    } {
-                                        (item.name().unwrap())
-                                    }
-                                }
-                            }
-                        }
-                    },
-                );
-                fs::File::create(subtree_path)
-                    .and_then(|mut f| f.write_all(subtree_html.into_string().as_bytes()))
-                    .unwrap();
+                build_tree_index_page(&subtree, &page, &full_filename, &subtree_path);
             }
             Some(git2::ObjectType::Blob) => {
                 let name = entry.name().unwrap();
