@@ -123,7 +123,6 @@ fn page_func(
                             a href={(url)} { (url) }
                         }
                         ul.inline {
-                            // TODO: relativize links
                             li { a href={(the_way_out) "log.html"} { "Commits" } }
                             li { a href={(the_way_out) "tree.html"} { "Files" } }
                             li { a href={(the_way_out) "refs.html"} { "Branches and tags" } }
@@ -301,33 +300,45 @@ fn main() -> Result<()> {
                     .unwrap();
             }
             Some(git2::ObjectType::Blob) => {
-                let path = parent_path.join(format!("{}.html", entry.name().unwrap()));
+                let name = entry.name().unwrap();
+                let path = parent_path.join(format!("{}.html", name));
                 let obj = entry
                     .to_object(&repository)
                     .unwrap()
                     .peel_to_blob()
                     .unwrap();
-                let content = std::str::from_utf8(obj.content()).unwrap();
-                let name = entry.name().unwrap();
                 let filename = PathBuf::from(&name);
-                let name_syntax = syntax_set.find_syntax_by_extension(&name);
-                let ext_syntax = syntax_set.find_syntax_by_extension(
-                    filename.extension().and_then(|x| x.to_str()).unwrap_or(""),
-                );
-                let first_line = syntect::util::LinesWithEndings::from(&content)
-                    .next()
-                    .unwrap_or_default();
-                let line_syntax = syntax_set.find_syntax_by_first_line(first_line);
-                let syntax = name_syntax
-                    .or(ext_syntax)
-                    .or(line_syntax)
-                    .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
-                let snippet = maud::PreEscaped(syntect::html::highlighted_html_for_string(
-                    content,
-                    &syntax_set,
-                    syntax,
-                    theme,
-                ));
+                let snippet = match std::str::from_utf8(obj.content()) {
+                    Ok(content) => {
+                        let name_syntax = syntax_set.find_syntax_by_extension(&name);
+                        let ext_syntax = syntax_set.find_syntax_by_extension(
+                            filename.extension().and_then(|x| x.to_str()).unwrap_or(""),
+                        );
+                        let first_line = syntect::util::LinesWithEndings::from(&content)
+                            .next()
+                            .unwrap_or_default();
+                        let line_syntax = syntax_set.find_syntax_by_first_line(first_line);
+                        let syntax = name_syntax
+                            .or(ext_syntax)
+                            .or(line_syntax)
+                            .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+                        maud::PreEscaped(syntect::html::highlighted_html_for_string(
+                            content,
+                            &syntax_set,
+                            syntax,
+                            theme,
+                        ))
+                    }
+                    Err(_) => {
+                        fs::File::create(parent_path.join(name))
+                            .and_then(|mut f| f.write_all(obj.content()))
+                            .unwrap();
+                        html! {
+                            p { "This is not a file of UTF-8 honour." }
+                            a href={(name)} { "See raw" }
+                        }
+                    }
+                };
                 let blob = page(
                     &full_filename,
                     &path,
