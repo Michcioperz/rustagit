@@ -168,20 +168,19 @@ fn main() -> Result<()> {
     let syntax_set = syntect::parsing::SyntaxSet::load_defaults_newlines();
     let theme_set = syntect::highlighting::ThemeSet::load_defaults();
     let theme = &theme_set.themes["InspiredGitHub"];
-    let class_style = syntect::html::ClassStyle::SpacedPrefixed { prefix: "syntect-" };
 
     fs::create_dir_all(&args.destination)?;
 
     let css_path = &args.destination.join("rustagit.css");
-    let css = syntect::html::css_for_theme_with_class_style(theme, class_style)
-        + r#"
+    let css = r#"
         .numeric {
             text-align: right;
         }
         td.numeric {
             font-family: monospace;
         }
-    "#;
+    "#
+    .to_string();
     fs::File::create(css_path).and_then(|mut f| f.write_all(css.as_bytes()))?;
 
     let log_path = &args.destination.join("log.html");
@@ -332,20 +331,12 @@ fn main() -> Result<()> {
                             .or(ext_syntax)
                             .or(line_syntax)
                             .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
-                        let mut generator =
-                            syntect::html::ClassedHTMLGenerator::new_with_class_style(
-                                syntax,
-                                &syntax_set,
-                                class_style,
-                            );
-                        for line in content.lines() {
-                            generator.parse_html_for_line(line);
-                        }
-                        html! {
-                            pre {
-                                (maud::PreEscaped(generator.finalize()))
-                            }
-                        }
+                        maud::PreEscaped(syntect::html::highlighted_html_for_string(
+                            content,
+                            &syntax_set,
+                            syntax,
+                            theme,
+                        ))
                     }
                     Err(_) => {
                         fs::File::create(parent_path.join(name))
