@@ -152,6 +152,10 @@ fn main() -> Result<()> {
         args.destination.clone(),
     );
 
+    let syntax_set = syntect::parsing::SyntaxSet::load_defaults_newlines();
+    let theme_set = syntect::highlighting::ThemeSet::load_defaults();
+    let theme = &theme_set.themes["InspiredGitHub"];
+
     fs::create_dir_all(&args.destination)?;
 
     let log_path = &args.destination.join("log.html");
@@ -303,13 +307,32 @@ fn main() -> Result<()> {
                     .unwrap()
                     .peel_to_blob()
                     .unwrap();
+                let content = std::str::from_utf8(obj.content()).unwrap();
+                let name = entry.name().unwrap();
+                let filename = PathBuf::from(&name);
+                let name_syntax = syntax_set.find_syntax_by_extension(&name);
+                let ext_syntax = syntax_set.find_syntax_by_extension(
+                    filename.extension().and_then(|x| x.to_str()).unwrap_or(""),
+                );
+                let first_line = syntect::util::LinesWithEndings::from(&content)
+                    .next()
+                    .unwrap_or_default();
+                let line_syntax = syntax_set.find_syntax_by_first_line(first_line);
+                let syntax = name_syntax
+                    .or(ext_syntax)
+                    .or(line_syntax)
+                    .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+                let snippet = maud::PreEscaped(syntect::html::highlighted_html_for_string(
+                    content,
+                    &syntax_set,
+                    syntax,
+                    theme,
+                ));
                 let blob = page(
                     &full_filename,
                     &path,
                     html! {
-                        pre {
-                            (std::str::from_utf8(obj.content()).unwrap())
-                        }
+                        (snippet)
                     },
                 );
                 fs::File::create(path)
