@@ -172,6 +172,7 @@ fn build_tree_index_page(
 }
 
 fn main() -> Result<()> {
+    better_panic::install();
     let args: Args = argh::from_env();
     let repository = git2::Repository::open(&args.source)?;
     let head = repository.head()?;
