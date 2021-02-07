@@ -355,7 +355,7 @@ impl Templator<'_> {
                     td {
                         pre.numeric {
                             @for i in 1..=line_count {
-                                a href={"#L" (i)} {
+                                a id={"L" (i)} href={"#L" (i)} {
                                     (i) "\n"
                                 }
                             }
