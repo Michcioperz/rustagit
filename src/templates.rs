@@ -150,7 +150,7 @@ impl Templator<'_> {
                         ul.inline {
                             li { a href=(the_way_out.commit_log()) { "Commits" } }
                             li { a href=(the_way_out.tree_index()) { "Files" } }
-                            li { a href=(the_way_out.refs_list()) { "Branches and tags" } }
+                            // TODO: li { a href=(the_way_out.refs_list()) { "Branches and tags" } }
                         }
                     }
                     main { (content) }
