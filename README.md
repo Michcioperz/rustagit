@@ -16,7 +16,8 @@ rustagit is available under MIT License, just like stagit.
  - [ ] quick link to README and LICENSE
  - [ ] generator of common index page for all repositories
  - [ ] commit log in RSS/Atom
- - [ ] line numbers in files
+ - [x] line numbers in files
+ - [ ] linkability of line numbers
  - [ ] nice styling
 
 ## How to use

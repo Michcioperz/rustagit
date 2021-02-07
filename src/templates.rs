@@ -342,14 +342,29 @@ impl Templator<'_> {
             .or(ext_syntax)
             .or(line_syntax)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
-        Ok(maud::PreEscaped(
-            syntect::html::highlighted_html_for_string(
-                content,
-                &self.syntax_set,
-                syntax,
-                self.theme,
-            ),
-        ))
+        let line_count = syntect::util::LinesWithEndings::from(content).count();
+        let highlit = maud::PreEscaped(syntect::html::highlighted_html_for_string(
+            content,
+            &self.syntax_set,
+            syntax,
+            self.theme,
+        ));
+        Ok(html! {
+            table {
+                tr {
+                    td {
+                        pre.numeric {
+                            @for i in 1..=line_count {
+                                a href={"#L" (i)} {
+                                    (i) "\n"
+                                }
+                            }
+                        }
+                    }
+                    td { (highlit) }
+                }
+            }
+        })
     }
 
     pub fn write_tree_leaf(
