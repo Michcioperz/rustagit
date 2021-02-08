@@ -37,10 +37,11 @@ impl Repository {
     }
 
     /// Reads a text file from a given file in .git.
+    /// Whitespace is trimmed from that text.
     /// Returns a blank String if the file does not exist.
     pub fn read_gitdir_or_blank(&self, name: &str) -> Result<String> {
         match fs::read_to_string(self.gitdir().join(name)) {
-            Ok(s) => Ok(s),
+            Ok(s) => Ok(s.trim().to_string()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok("".to_string()),
             Err(e) => Err(e.into()),
         }
