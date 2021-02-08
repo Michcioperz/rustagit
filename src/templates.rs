@@ -138,14 +138,14 @@ impl Templator<'_> {
                     link rel="stylesheet" href=(the_way_out.style_css());
                 }
                 body {
-                    nav {
-                        h1 { (self.repository.name()) }
+                    nav id="repository" itemscope itemtype="http://schema.org/SoftwareSourceCode" {
+                        h1 itemprop="name" { (self.repository.name()) }
                         @let description = self.repository.description()?;
-                        @if !description.is_empty() { p { (description) } }
+                        @if !description.is_empty() { p itemprop="description" { (description) } }
                         @let url = self.repository.url()?;
                         @if !url.is_empty() { pre {
                             "git clone "
-                            a href={(url)} { (url) }
+                            a itemprop="codeRepository" href={(url)} { (url) }
                         } }
                         ul.inline {
                             li { a href=(the_way_out.commit_log()) { "Commits" } }
@@ -154,10 +154,12 @@ impl Templator<'_> {
                         }
                     }
                     main { (content) }
-                    footer {
+                    footer itemscope itemtype="http://schema.org/SoftwareApplication" {
                         "Powered by "
-                        a href="https://git.hinata.iscute.ovh/rustagit/" {
-                            "Rustagit, static git browser generator"
+                        a itemprop="url" href="https://git.hinata.iscute.ovh/rustagit/" {
+                            span itemprop="name" { "Rustagit" }
+                            ", "
+                            span itemprop="description" { "static git browser generator" }
                         }
                     }
                 }
@@ -191,18 +193,23 @@ impl Templator<'_> {
                     tbody {
                         @for ci_result in self.repository.commit_log()? {
                             @let ci = ci_result?;
-                            tr {
+                            tr itemscope itemtype="http://schema.org/UpdateAction" {
+                                link itemprop="targetCollection" itemid="#repository";
                                 td {
-                                    abbr title={(ci.time())} {
+                                    abbr title={(ci.time())} itemprop="endTime" {
                                         (ci.time().date().format("%Y-%m-%d"))
                                     }
                                 }
                                 td {
-                                    a href={"commit/" (ci.commit.id()) ".html"} {
-                                        (ci.commit.summary().ok_or(InvalidUtf)?)
+                                    a itemprop="url" href={"commit/" (ci.commit.id()) ".html"} {
+                                        span itemprop="description" { (ci.commit.summary().ok_or(InvalidUtf)?) }
                                     }
                                 }
-                                td { (ci.commit.author().name().ok_or(InvalidUtf)?) }
+                                td itemprop="agent" itemscope itemtype="http://schema.org/Person" {
+                                    span itemprop="name" {
+                                        (ci.commit.author().name().ok_or(InvalidUtf)?)
+                                    }
+                                }
                                 @let diffstats = ci.diff.stats()?;
                                 td.numeric { (diffstats.files_changed()) }
                                 td.numeric { (diffstats.insertions()) }
@@ -223,34 +230,39 @@ impl Templator<'_> {
             &format!("Commit {}", ci.commit.id()),
             &patch_path.base,
             html! {
-                dl {
+                dl itemscope itemtype="http://schema.org/UpdateAction" {
+                    link itemprop="targetCollection" itemid="#repository";
                     dt { "commit" }
-                    dd { (ci.commit.id()) }
+                    dd itemprop="identifier" { (ci.commit.id()) }
                     @for parent in ci.commit.parents() {
                         dt { "parent" }
                         dd { a href={(parent.id()) ".html"} { (parent.id()) } }
                     }
                     dt { "author" }
-                    dd {
-                        (ci.commit.author().name().ok_or(InvalidUtf)?)
-                        " <"
+                    dd itemprop="agent" itemscope itemtype="http://schema.org/Person" {
                         @let sig = ci.commit.author();
+                        span itemprop="name" {
+                            (sig.name().ok_or(InvalidUtf)?)
+                        }
+                        " <"
                         @let email = sig.email().ok_or(InvalidUtf)?;
-                        a href={"mailto:" (&email)} { (email) }
+                        a itemprop="email" href={"mailto:" (&email)} { (email) }
                         ">"
                     }
                     dt { "committer" }
-                    dd {
-                        (ci.commit.author().name().ok_or(InvalidUtf)?)
-                        " <"
+                    dd itemprop="participant" itemscope itemtype="http://schema.org/Person" {
                         @let sig = ci.commit.committer();
+                        span itemprop="name" {
+                            (sig.name().ok_or(InvalidUtf)?)
+                        }
+                        " <"
                         @let email = sig.email().ok_or(InvalidUtf)?;
-                        a href={"mailto:" (&email)} { (email) }
+                        a itemprop="email" href={"mailto:" (&email)} { (email) }
                         ">"
                     }
                     dt { "message" }
                     dd {
-                        pre { (ci.commit.message().ok_or(InvalidUtf)?) }
+                        pre itemprop="description" { (ci.commit.message().ok_or(InvalidUtf)?) }
                     }
                     dt { "diffstat" }
                     dd {
@@ -356,12 +368,13 @@ impl Templator<'_> {
                         pre.numeric {
                             @for i in 1..=line_count {
                                 a id={"L" (i)} href={"#L" (i)} {
-                                    (i) "\n"
+                                    (i)
                                 }
+                                "\n"
                             }
                         }
                     }
-                    td { (highlit) }
+                    td itemprop="text" { (highlit) }
                 }
             }
         })
@@ -374,9 +387,16 @@ impl Templator<'_> {
         tree_path: std::path::PathBuf,
     ) -> Result<()> {
         let raw_name = file_path.base.with_extension("");
-        let content = self.template_page(tree_path.to_str().ok_or(InvalidUtf)?, &file_path, match std::str::from_utf8(object.content()) {
+        let tree_path_str = tree_path.to_str().ok_or(InvalidUtf)?;
+        let content = self.template_page(tree_path_str, &file_path, match std::str::from_utf8(object.content()) {
             Ok(content) => {
-                self.highlight_object(raw_name, content)?
+                html! {
+                    span itemscope itemtype="http://schema.org/TextDigitalDocument" {
+                        link itemprop="targetCollection" itemid="#repository";
+                        meta itemprop="name" content=(tree_path_str);
+                        (self.highlight_object(raw_name, content)?)
+                    }
+                }
             },
             Err(_) => {
                 fs::write(&raw_name, object.content())?;
