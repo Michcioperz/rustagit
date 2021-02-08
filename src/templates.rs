@@ -157,6 +157,8 @@ impl Templator<'_> {
                     footer itemscope itemtype="http://schema.org/SoftwareApplication" {
                         "Powered by "
                         a itemprop="url" href="https://git.hinata.iscute.ovh/rustagit/" {
+                            meta itemprop="applicationCategory" content="Development";
+                            meta itemprop="operatingSystem" content="POSIX";
                             span itemprop="name" { "Rustagit" }
                             ", "
                             span itemprop="description" { "static git browser generator" }
