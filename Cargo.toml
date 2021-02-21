@@ -10,7 +10,7 @@ git2 = { version = "0.13.17", default-features = false }
 argh = "0.1.4"
 anyhow = "1.0.38"
 maud = "0.22.2"
-thiserror = "1.0.23"
+thiserror = "1.0.24"
 chrono = "0.4.19"
 fs-err = "2.5.0"
 humantime = "2.1.0"
