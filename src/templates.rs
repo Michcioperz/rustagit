@@ -415,7 +415,7 @@ impl Templator<'_> {
     pub fn write_all_tree_nodes(&self) -> Result<()> {
         let head = self.repository.inner.head()?;
         let head_tree = head.peel_to_tree()?;
-        let mut err = None;
+        let mut err = Ok(());
         let tree_root = self.url.tree_dir();
         let slash_root = std::path::PathBuf::from("/");
         let walker = |parent: &str, entry: &git2::TreeEntry| -> Result<()> {
@@ -450,24 +450,16 @@ impl Templator<'_> {
             tree_root.dot_html(),
             std::path::PathBuf::from("/"),
         )?;
-        head_tree
-            .walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
-                match walker(parent, entry) {
-                    Ok(()) => git2::TreeWalkResult::Ok,
-                    Err(e) => {
-                        err = Some(e);
-                        git2::TreeWalkResult::Abort
-                    }
+        head_tree.walk(git2::TreeWalkMode::PreOrder, |parent, entry| {
+            match walker(parent, entry) {
+                Ok(()) => git2::TreeWalkResult::Ok,
+                Err(e) => {
+                    err = Err(e);
+                    git2::TreeWalkResult::Abort
                 }
-            })
-            .map_err(|e| -> anyhow::Error {
-                if e.class() == git2::ErrorClass::Callback {
-                    err.unwrap().into()
-                } else {
-                    e.into()
-                }
-            })?;
-        Ok(())
+            }
+        })?;
+        err
     }
 
     pub fn generate(&self) -> Result<()> {
