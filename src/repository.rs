@@ -26,7 +26,7 @@ impl Repository {
     pub fn open<S: AsRef<std::path::Path>>(path: S) -> Result<Repository> {
         Ok(Repository {
             inner: git2::Repository::open(path.as_ref())?,
-            path: path.as_ref().canonicalize()?,
+            path: fs_err::canonicalize(path.as_ref())?,
             cached_properties: Default::default(),
         })
     }
