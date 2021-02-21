@@ -25,7 +25,10 @@ pub struct InvalidUtf;
 fn main() -> Result<()> {
     better_panic::install();
     let args: Args = argh::from_env();
-    let repository = repository::Repository::open(args.source)?;
+    let mut repository = repository::Repository::open(args.source)?;
+    repository.prefetch_name();
+    repository.prefetch_description();
+    repository.prefetch_url();
 
     let syntax_set = syntect::parsing::SyntaxSet::load_defaults_newlines();
     let theme_set = syntect::highlighting::ThemeSet::load_defaults();

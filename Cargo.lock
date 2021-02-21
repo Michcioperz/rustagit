@@ -120,6 +120,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
 
 [[package]]
+name = "cached_property"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6460889fb1a4a60fcaed26bd53d564ce91882a4c8af949ceb4f943e42c33a38"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,6 +566,7 @@ dependencies = [
  "anyhow",
  "argh",
  "better-panic",
+ "cached_property",
  "chrono",
  "fs-err",
  "git2",

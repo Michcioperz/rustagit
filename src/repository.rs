@@ -1,4 +1,5 @@
 use anyhow::Result;
+use cached_property::{cached_property, cached_property_struct};
 use fs_err as fs;
 
 pub struct CommitInfo<'a> {
@@ -15,6 +16,7 @@ impl CommitInfo<'_> {
     }
 }
 
+#[cached_property_struct({name: String, url: String, description: String})]
 pub struct Repository {
     pub(crate) inner: git2::Repository,
     pub(crate) path: std::path::PathBuf,
@@ -25,6 +27,7 @@ impl Repository {
         Ok(Repository {
             inner: git2::Repository::open(path.as_ref())?,
             path: path.as_ref().canonicalize()?,
+            cached_properties: Default::default(),
         })
     }
 
@@ -32,26 +35,28 @@ impl Repository {
         self.inner.path()
     }
 
+    #[cached_property]
     pub fn name(&self) -> String {
         self.path.file_name().unwrap().to_string_lossy().to_string()
     }
 
     /// Reads a text file from a given file in .git.
     /// Whitespace is trimmed from that text.
-    /// Returns a blank String if the file does not exist.
-    pub fn read_gitdir_or_blank(&self, name: &str) -> Result<String> {
+    /// Returns a blank String on error.
+    pub fn read_gitdir_or_blank(&self, name: &str) -> String {
         match fs::read_to_string(self.gitdir().join(name)) {
-            Ok(s) => Ok(s.trim().to_string()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok("".to_string()),
-            Err(e) => Err(e.into()),
+            Ok(s) => s.trim().to_string(),
+            Err(_) => "".to_string(),
         }
     }
 
-    pub fn description(&self) -> Result<String> {
+    #[cached_property]
+    pub fn description(&self) -> String {
         self.read_gitdir_or_blank("description")
     }
 
-    pub fn url(&self) -> Result<String> {
+    #[cached_property]
+    pub fn url(&self) -> String {
         self.read_gitdir_or_blank("url")
     }
 

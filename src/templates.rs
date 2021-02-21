@@ -140,9 +140,9 @@ impl Templator<'_> {
                 body {
                     nav id="repository" itemscope itemtype="http://schema.org/SoftwareSourceCode" {
                         h1 itemprop="name" { (self.repository.name()) }
-                        @let description = self.repository.description()?;
+                        @let description = self.repository.description();
                         @if !description.is_empty() { p itemprop="description" { (description) } }
-                        @let url = self.repository.url()?;
+                        @let url = self.repository.url();
                         @if !url.is_empty() { pre {
                             "git clone "
                             a itemprop="codeRepository" href={(url)} { (url) }
