@@ -301,9 +301,10 @@ impl Templator<'_> {
         file_path: UrlResolver,
         tree_path: std::path::PathBuf,
     ) -> Result<()> {
-        fs::create_dir_all(file_path.base.parent().unwrap())?;
-        let subtree_root = UrlResolver {
-            base: std::path::PathBuf::from(file_path.base.with_extension("").file_name().unwrap()),
+        let subtree_root = file_path.base.with_extension("");
+        fs::create_dir_all(&subtree_root)?;
+        let subtree_rel = UrlResolver {
+            base: std::path::PathBuf::from(subtree_root.file_name().unwrap()),
         };
         let content = self.template_page(
             tree_path.to_str().ok_or(InvalidUtf)?,
@@ -313,7 +314,7 @@ impl Templator<'_> {
                     @for item in subtree {
                         li {
                             @let name = item.name().ok_or(InvalidUtf)?;
-                            a href=(subtree_root.join(name).dot_html()) {
+                            a href=(subtree_rel.join(name).dot_html()) {
                                 @if let Some(git2::ObjectType::Tree) = item.kind() {
                                     (name) "/"
                                 } @else {
