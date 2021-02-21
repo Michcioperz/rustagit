@@ -33,6 +33,7 @@ fn main() -> Result<()> {
     let syntax_set = syntect::parsing::SyntaxSet::load_defaults_newlines();
     let theme_set = syntect::highlighting::ThemeSet::load_defaults();
     let theme = &theme_set.themes["InspiredGitHub"];
+    fs_err::create_dir_all(&args.destination)?;
     let url = templates::UrlResolver::new(fs_err::canonicalize(args.destination)?);
     let templator = templates::Templator {
         repository,
